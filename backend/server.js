@@ -4,7 +4,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
-const Anthropic = require("@anthropic-ai/sdk");
+const Groq = require("groq-sdk");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -36,7 +36,7 @@ const limiter = rateLimit({
 app.use("/api/", limiter);
 
 // ── Anthropic client ──────────────────────────────────────────────────────────
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 function buildPrompt(data) {
@@ -123,13 +123,12 @@ app.post("/api/generate-plan", async (req, res) => {
 
     const prompt = buildPrompt(userData);
 
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 3000,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const rawText = message.content[0].text.trim();
+    const message = await groq.chat.completions.create({
+  model: "llama-3.3-70b-versatile",
+  max_tokens: 3000,
+  messages: [{ role: "user", content: prompt }],
+});
+const rawText = message.choices[0].message.content.trim();
 
     // Strip possible markdown fences
     const jsonText = rawText.replace(/^```json\n?/, "").replace(/\n?```$/, "");
@@ -166,13 +165,12 @@ Return ONLY valid JSON for ONE slot (same structure, no extra text):
   "tips": "Productivity tip"
 }`;
 
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 400,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const rawText = message.content[0].text.trim();
+    const message = await groq.chat.completions.create({
+  model: "llama-3.3-70b-versatile",
+  max_tokens: 400,
+  messages: [{ role: "user", content: prompt }],
+});
+const rawText = message.choices[0].message.content.trim();
     const jsonText = rawText.replace(/^```json\n?/, "").replace(/\n?```$/, "");
     const newSlot = JSON.parse(jsonText);
 
