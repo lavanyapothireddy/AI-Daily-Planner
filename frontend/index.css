@@ -1,0 +1,115 @@
+:root {
+  --cream: #faf6f1;
+  --warm-white: #fff9f4;
+  --ink: #1a1208;
+  --ink-soft: #3d3020;
+  --amber: #d4820a;
+  --amber-light: #f0a832;
+  --amber-pale: #fef3dc;
+  --sage: #5a7a5e;
+  --sage-light: #8aab8e;
+  --rose: #c0635a;
+  --slate: #6b7a99;
+  --border: #e8ddd0;
+  --shadow-soft: 0 2px 20px rgba(26, 18, 8, 0.06);
+  --shadow-card: 0 4px 32px rgba(26, 18, 8, 0.1);
+  --radius: 16px;
+  --font-display: "Playfair Display", Georgia, serif;
+  --font-body: "DM Sans", system-ui, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--cream);
+  color: var(--ink);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--cream); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--amber); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 12px;
+  border: none;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--ink);
+  color: var(--cream);
+}
+.btn-primary:hover {
+  background: var(--ink-soft);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(26, 18, 8, 0.2);
+}
+
+.btn-amber {
+  background: var(--amber);
+  color: white;
+}
+.btn-amber:hover {
+  background: var(--amber-light);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(212, 130, 10, 0.35);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1.5px solid var(--border);
+}
+.btn-ghost:hover {
+  background: var(--amber-pale);
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+input, textarea, select {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  width: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 3px rgba(212, 130, 10, 0.12);
+}
+
+label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
