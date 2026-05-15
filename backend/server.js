@@ -14,19 +14,33 @@ app.use(helmet());
 app.use(morgan("combined"));
 app.use(express.json());
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",")
-  : ["http://localhost:3000", "http://localhost:5173"];
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    
+    const allowed = process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
+      : [];
+    
+    if (allowed.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // In development, allow all
+    if (process.env.NODE_ENV !== "production") {
+      return callback(null, true);
+    }
+    
+    callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-  })
-);
+// Handle preflight requests explicitly
+app.options("*", cors());
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -35,24 +49,14 @@ const limiter = rateLimit({
 });
 app.use("/api/", limiter);
 
-// ── Anthropic client ──────────────────────────────────────────────────────────
+// ── Groq client ───────────────────────────────────────────────────────────────
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 function buildPrompt(data) {
   const {
-    name,
-    date,
-    wakeTime,
-    sleepTime,
-    goals,
-    tasks,
-    priorities,
-    workStyle,
-    breaks,
-    meals,
-    exercise,
-    notes,
+    name, date, wakeTime, sleepTime, goals, tasks,
+    priorities, workStyle, breaks, meals, exercise, notes,
   } = data;
 
   return `You are an expert productivity coach and daily planner. Generate a highly detailed, personalized daily schedule.
@@ -83,7 +87,7 @@ ${exercise || "None planned"}
 ADDITIONAL NOTES:
 ${notes || "None"}
 
-Generate a complete daily schedule in the following JSON format ONLY (no markdown, no extra text):
+Generate a complete daily schedule in the following JSON format ONLY (no markdown, no extra text, no code fences):
 {
   "greeting": "Personalized motivational greeting",
   "summary": "2-3 sentence overview of the day plan",
@@ -101,10 +105,10 @@ Generate a complete daily schedule in the following JSON format ONLY (no markdow
   "focusTip": "Main productivity insight for the day",
   "motivationalQuote": "Relevant motivational quote",
   "dailyStats": {
-    "workHours": number,
-    "breakTime": number,
-    "personalTime": number,
-    "totalScheduled": number
+    "workHours": 0,
+    "breakTime": 0,
+    "personalTime": 0,
+    "totalScheduled": 0
   }
 }`;
 }
@@ -124,17 +128,23 @@ app.post("/api/generate-plan", async (req, res) => {
     const prompt = buildPrompt(userData);
 
     const message = await groq.chat.completions.create({
-  model: "llama-3.3-70b-versatile",
-  max_tokens: 3000,
-  messages: [{ role: "user", content: prompt }],
-});
-const rawText = message.choices[0].message.content.trim();
+      model: "llama-3.3-70b-versatile",
+      max_tokens: 3000,
+      messages: [{ role: "user", content: prompt }],
+    });
 
-    // Strip possible markdown fences
-    const jsonText = rawText.replace(/^```json\n?/, "").replace(/\n?```$/, "");
+    const rawText = message.choices[0].message.content.trim();
+
+    // Strip markdown fences if present
+    const jsonText = rawText
+      .replace(/^```json\n?/, "")
+      .replace(/^```\n?/, "")
+      .replace(/\n?```$/, "")
+      .trim();
+
     const plan = JSON.parse(jsonText);
-
     res.json({ success: true, plan });
+
   } catch (err) {
     console.error("Error generating plan:", err);
     if (err instanceof SyntaxError) {
@@ -154,7 +164,7 @@ app.post("/api/regenerate-slot", async (req, res) => {
 Current slot: ${JSON.stringify(slot)}
 Day context: ${context || "General workday"}
 
-Return ONLY valid JSON for ONE slot (same structure, no extra text):
+Return ONLY valid JSON for ONE slot, no markdown, no code fences, no extra text:
 {
   "time": "${slot.time}",
   "endTime": "${slot.endTime}",
@@ -166,15 +176,21 @@ Return ONLY valid JSON for ONE slot (same structure, no extra text):
 }`;
 
     const message = await groq.chat.completions.create({
-  model: "llama-3.3-70b-versatile",
-  max_tokens: 400,
-  messages: [{ role: "user", content: prompt }],
-});
-const rawText = message.choices[0].message.content.trim();
-    const jsonText = rawText.replace(/^```json\n?/, "").replace(/\n?```$/, "");
-    const newSlot = JSON.parse(jsonText);
+      model: "llama-3.3-70b-versatile",
+      max_tokens: 400,
+      messages: [{ role: "user", content: prompt }],
+    });
 
+    const rawText = message.choices[0].message.content.trim();
+    const jsonText = rawText
+      .replace(/^```json\n?/, "")
+      .replace(/^```\n?/, "")
+      .replace(/\n?```$/, "")
+      .trim();
+
+    const newSlot = JSON.parse(jsonText);
     res.json({ success: true, slot: newSlot });
+
   } catch (err) {
     console.error("Regenerate slot error:", err);
     res.status(500).json({ error: err.message || "Internal server error" });
