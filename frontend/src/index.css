@@ -1,0 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+:root {
+  --bg: #080c14;
+  --surface: #0f1623;
+  --surface2: #161e2e;
+  --border: rgba(99, 179, 237, 0.12);
+  --accent: #38bdf8;
+  --accent2: #818cf8;
+  --accent3: #34d399;
+  --gold: #fbbf24;
+  --text: #e2e8f0;
+  --text-muted: #64748b;
+  --text-dim: #94a3b8;
+  --danger: #f87171;
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 4px 32px rgba(0,0,0,0.4);
+  --glow: 0 0 30px rgba(56, 189, 248, 0.15);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-weight: 400;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::selection {
+  background: rgba(56, 189, 248, 0.3);
+}
