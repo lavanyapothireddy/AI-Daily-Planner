@@ -1,203 +1,182 @@
-require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const helmet = require("helmet");
-const morgan = require("morgan");
-const rateLimit = require("express-rate-limit");
 const Groq = require("groq-sdk");
+require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ── Middleware ────────────────────────────────────────────────────────────────
-app.use(helmet());
-app.use(morgan("combined"));
+// Initialize Groq client
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
+
+// Middleware
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "*",
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type"],
+  })
+);
 app.use(express.json());
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, Postman)
-    if (!origin) return callback(null, true);
-    
-    const allowed = process.env.ALLOWED_ORIGINS
-      ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
-      : [];
-    
-    if (allowed.includes(origin)) {
-      return callback(null, true);
-    }
-    
-    // In development, allow all
-    if (process.env.NODE_ENV !== "production") {
-      return callback(null, true);
-    }
-    
-    callback(new Error("Not allowed by CORS"));
-  },
-  credentials: true,
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
-
-// Handle preflight requests explicitly
-app.options("*", cors());
-
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  message: { error: "Too many requests. Please try again later." },
+// Health check
+app.get("/", (req, res) => {
+  res.json({ status: "AI Daily Planner API is running 🚀" });
 });
-app.use("/api/", limiter);
 
-// ── Groq client ───────────────────────────────────────────────────────────────
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// ─── Generate Daily Plan ──────────────────────────────────────────────────────
+app.post("/api/generate-plan", async (req, res) => {
+  const { name, goals, wakeTime, sleepTime, priorities, mood, availableHours } =
+    req.body;
 
-// ── Helper ────────────────────────────────────────────────────────────────────
-function buildPrompt(data) {
-  const {
-    name, date, wakeTime, sleepTime, goals, tasks,
-    priorities, workStyle, breaks, meals, exercise, notes,
-  } = data;
+  if (!goals || !priorities) {
+    return res.status(400).json({ error: "Goals and priorities are required." });
+  }
 
-  return `You are an expert productivity coach and daily planner. Generate a highly detailed, personalized daily schedule.
+  const systemPrompt = `You are an expert productivity coach and daily planner AI. 
+Your job is to create highly personalized, realistic, and motivating daily schedules.
+Always respond with a valid JSON object only — no markdown, no explanation outside JSON.`;
 
-USER PROFILE:
-- Name: ${name || "User"}
-- Date: ${date}
-- Wake Up Time: ${wakeTime}
-- Sleep Time: ${sleepTime}
-- Work Style: ${workStyle || "Balanced"}
-- Break Preference: ${breaks || "Regular short breaks"}
+  const userPrompt = `Create a detailed daily plan for ${name || "the user"}.
 
-GOALS FOR TODAY:
-${goals || "General productivity"}
+User Details:
+- Wake Time: ${wakeTime || "7:00 AM"}
+- Sleep Time: ${sleepTime || "11:00 PM"}
+- Available Hours for Work/Tasks: ${availableHours || "8"} hours
+- Current Mood/Energy: ${mood || "Neutral"}
+- Main Goals for Today: ${goals}
+- Top Priorities: ${priorities}
 
-TASKS TO COMPLETE:
-${tasks || "No specific tasks listed"}
-
-PRIORITIES (High → Low):
-${priorities || "Not specified"}
-
-MEALS PLANNED:
-${meals || "Standard 3 meals"}
-
-EXERCISE:
-${exercise || "None planned"}
-
-ADDITIONAL NOTES:
-${notes || "None"}
-
-Generate a complete daily schedule in the following JSON format ONLY (no markdown, no extra text, no code fences):
+Respond ONLY with this exact JSON structure:
 {
-  "greeting": "Personalized motivational greeting",
-  "summary": "2-3 sentence overview of the day plan",
+  "greeting": "A warm personalized greeting for the user",
+  "motivationalQuote": "An inspiring quote relevant to their goals",
+  "dayTheme": "A single theme/focus word for the day (e.g. Focus, Growth, Balance)",
   "schedule": [
     {
-      "time": "HH:MM AM/PM",
-      "endTime": "HH:MM AM/PM",
-      "title": "Activity title",
-      "description": "Brief description",
-      "category": "morning-routine|work|break|meal|exercise|personal|wind-down",
-      "priority": "high|medium|low",
-      "tips": "Productivity tip for this block"
+      "time": "7:00 AM",
+      "duration": "30 min",
+      "activity": "Activity name",
+      "category": "one of: Morning Routine, Deep Work, Break, Exercise, Meals, Learning, Admin, Evening Wind-down",
+      "tip": "A short actionable tip for this block",
+      "priority": "one of: High, Medium, Low"
     }
   ],
-  "focusTip": "Main productivity insight for the day",
-  "motivationalQuote": "Relevant motivational quote",
-  "dailyStats": {
-    "workHours": 0,
-    "breakTime": 0,
-    "personalTime": 0,
-    "totalScheduled": 0
-  }
+  "topThreeTasks": ["Task 1", "Task 2", "Task 3"],
+  "wellnessTips": ["Tip 1", "Tip 2", "Tip 3"],
+  "eveningReflection": ["Reflection question 1", "Reflection question 2", "Reflection question 3"],
+  "productivityScore": "A predicted productivity score out of 10 based on the plan",
+  "summary": "A 2-3 sentence motivational summary of the day plan"
 }`;
-}
 
-// ── Routes ────────────────────────────────────────────────────────────────────
-app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
-app.post("/api/generate-plan", async (req, res) => {
   try {
-    const { userData } = req.body;
-    if (!userData) {
-      return res.status(400).json({ error: "userData is required" });
-    }
-
-    const prompt = buildPrompt(userData);
-
-    const message = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+    const completion = await groq.chat.completions.create({
+      model: "llama3-70b-8192",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.7,
       max_tokens: 3000,
-      messages: [{ role: "user", content: prompt }],
     });
 
-    const rawText = message.choices[0].message.content.trim();
+    const rawContent = completion.choices[0]?.message?.content || "";
 
-    // Strip markdown fences if present
-    const jsonText = rawText
-      .replace(/^```json\n?/, "")
-      .replace(/^```\n?/, "")
-      .replace(/\n?```$/, "")
+    // Strip any markdown fences if present
+    const cleaned = rawContent
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
       .trim();
 
-    const plan = JSON.parse(jsonText);
+    const plan = JSON.parse(cleaned);
     res.json({ success: true, plan });
-
-  } catch (err) {
-    console.error("Error generating plan:", err);
-    if (err instanceof SyntaxError) {
-      return res.status(500).json({ error: "Failed to parse AI response. Please try again." });
+  } catch (error) {
+    console.error("Groq API Error:", error.message);
+    if (error instanceof SyntaxError) {
+      return res
+        .status(500)
+        .json({ error: "Failed to parse AI response. Please try again." });
     }
-    res.status(500).json({ error: err.message || "Internal server error" });
+    res.status(500).json({ error: "Failed to generate plan. Please try again." });
   }
 });
 
-app.post("/api/regenerate-slot", async (req, res) => {
+// ─── Chat with AI Coach ───────────────────────────────────────────────────────
+app.post("/api/chat", async (req, res) => {
+  const { message, conversationHistory, currentPlan } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: "Message is required." });
+  }
+
+  const systemPrompt = `You are an encouraging AI productivity coach integrated into a Daily Planner app. 
+You help users stay on track, adjust their plans, and stay motivated throughout the day.
+${currentPlan ? `The user's current plan summary: ${currentPlan}` : ""}
+Keep responses concise (2-4 sentences), actionable, and warm.`;
+
+  const messages = [
+    { role: "system", content: systemPrompt },
+    ...(conversationHistory || []),
+    { role: "user", content: message },
+  ];
+
   try {
-    const { slot, context } = req.body;
-    if (!slot) return res.status(400).json({ error: "slot is required" });
-
-    const prompt = `You are a productivity coach. Regenerate ONLY this single schedule slot with a better activity suggestion.
-
-Current slot: ${JSON.stringify(slot)}
-Day context: ${context || "General workday"}
-
-Return ONLY valid JSON for ONE slot, no markdown, no code fences, no extra text:
-{
-  "time": "${slot.time}",
-  "endTime": "${slot.endTime}",
-  "title": "New activity title",
-  "description": "Brief description",
-  "category": "${slot.category}",
-  "priority": "${slot.priority}",
-  "tips": "Productivity tip"
-}`;
-
-    const message = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: 400,
-      messages: [{ role: "user", content: prompt }],
+    const completion = await groq.chat.completions.create({
+      model: "llama3-70b-8192",
+      messages,
+      temperature: 0.8,
+      max_tokens: 500,
     });
 
-    const rawText = message.choices[0].message.content.trim();
-    const jsonText = rawText
-      .replace(/^```json\n?/, "")
-      .replace(/^```\n?/, "")
-      .replace(/\n?```$/, "")
-      .trim();
-
-    const newSlot = JSON.parse(jsonText);
-    res.json({ success: true, slot: newSlot });
-
-  } catch (err) {
-    console.error("Regenerate slot error:", err);
-    res.status(500).json({ error: err.message || "Internal server error" });
+    const reply = completion.choices[0]?.message?.content || "";
+    res.json({ success: true, reply });
+  } catch (error) {
+    console.error("Chat Error:", error.message);
+    res.status(500).json({ error: "Chat failed. Please try again." });
   }
 });
 
-// ── Start ─────────────────────────────────────────────────────────────────────
+// ─── Adjust Plan ──────────────────────────────────────────────────────────────
+app.post("/api/adjust-plan", async (req, res) => {
+  const { originalPlan, adjustment } = req.body;
+
+  if (!originalPlan || !adjustment) {
+    return res.status(400).json({ error: "Original plan and adjustment details required." });
+  }
+
+  const prompt = `Given this daily schedule: ${JSON.stringify(originalPlan.schedule)}
+  
+The user wants to make this adjustment: "${adjustment}"
+
+Return ONLY a JSON object with the updated "schedule" array using the same structure as the original. No explanation outside JSON.`;
+
+  try {
+    const completion = await groq.chat.completions.create({
+      model: "llama3-70b-8192",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a scheduling assistant. Return only valid JSON, no markdown.",
+        },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.5,
+      max_tokens: 2000,
+    });
+
+    const rawContent = completion.choices[0]?.message?.content || "";
+    const cleaned = rawContent.replace(/```json/gi, "").replace(/```/g, "").trim();
+    const result = JSON.parse(cleaned);
+    res.json({ success: true, updatedSchedule: result.schedule });
+  } catch (error) {
+    console.error("Adjust Plan Error:", error.message);
+    res.status(500).json({ error: "Failed to adjust plan." });
+  }
+});
+
 app.listen(PORT, () => {
-  console.log(`🚀 AI Daily Planner API running on port ${PORT}`);
+  console.log(`✅ Server running on http://localhost:${PORT}`);
 });
