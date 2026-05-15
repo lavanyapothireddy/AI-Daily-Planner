@@ -73,7 +73,7 @@ Respond ONLY with this exact JSON structure:
 
   try {
     const completion = await groq.chat.completions.create({
-      model: "llama3-70b-8192",
+      model: "llama-3.3-70b-versatile",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -124,7 +124,7 @@ Keep responses concise (2-4 sentences), actionable, and warm.`;
 
   try {
     const completion = await groq.chat.completions.create({
-      model: "llama3-70b-8192",
+      model: "llama-3.3-70b-versatile",
       messages,
       temperature: 0.8,
       max_tokens: 500,
